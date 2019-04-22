@@ -73,6 +73,7 @@ def validation(sess, neuralnet, saver, dataset, batch_size):
         saver.restore(sess, PACK_PATH+"/Checkpoint/model_checker")
 
     make_dir(path="recon_te_final")
+
     iterations = int(dataset.num_tr/batch_size**2)
     loss_recon_tot, loss_kl_tot = [], []
     for iteration in range(iterations):
@@ -81,6 +82,7 @@ def validation(sess, neuralnet, saver, dataset, batch_size):
         save_result(canvas_seq=canvas_seq_te, height=dataset.height, width=dataset.width, batch_size=batch_size, epoch=0, savedir="recon_te_final")
         loss_recon_tot.append(loss_recon_te)
         loss_kl_tot.append(loss_kl_te)
+        
     loss_recon_tot = np.asarray(loss_recon_tot)
     loss_kl_tot = np.asarray(loss_kl_tot)
     print("Recon:%.5f  KL:%.5f" %(loss_recon_tot.mean(), loss_kl_tot.mean()))

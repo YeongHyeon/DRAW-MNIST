@@ -14,6 +14,8 @@ def make_dir(path):
 
 def save_image(savepath, image): scipy.misc.imsave(savepath, image)
 
+def sigmoid(x): return 1 / (1 + np.exp(x))
+
 def make_canvas(images, size):
 
     h, w = images.shape[1], images.shape[2]
@@ -29,10 +31,10 @@ def make_canvas(images, size):
 
 def save_result(canvas_seq, height, width, batch_size, epoch, savedir="recon"):
 
-    canvas_seq = 1.0 / (1.0 + np.exp((-np.array(canvas_seq))+1e-12)) # sigmoid activation
+    canvas_seq = np.asarray(canvas_seq)
 
     for cs_iter in range(canvas_seq.shape[0]):
-        tmp_sequence = np.reshape(canvas_seq[cs_iter], [-1, height, width])
+        tmp_sequence = np.reshape(sigmoid(canvas_seq[cs_iter]), [-1, height, width])
         canvas = make_canvas(tmp_sequence, [batch_size, batch_size])
         save_image(os.path.join("%s" %(savedir), "epoch%06d_seq%03d.png" %(epoch, cs_iter)), canvas)
 

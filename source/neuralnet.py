@@ -60,7 +60,7 @@ class DRAW(object):
         for t in range(self.sequence_length):
             tmp_mu = tf.square(self.mu[t])
             tmp_sigma = tf.square(self.sigma[t])
-            kl_list[t] = 0.5 * tf.reduce_sum(tf.square(tmp_mu) + tf.square(tmp_sigma) - tf.log(tf.square(tmp_sigma) + 1e-12) - 1, axis=1)
+            kl_list[t] = 0.5 * tf.reduce_sum(tf.square(tmp_mu) + tf.square(tmp_sigma) - tf.log(tf.square(tmp_sigma) + 1e-12) - 1, axis=1) - (self.sequence_length * 0.5)
         self.loss_kl = tf.reduce_mean(tf.add_n(kl_list)) # element wise sum using tf.add_n
 
         self.loss_recon = -tf.reduce_mean(self.loss_recon)

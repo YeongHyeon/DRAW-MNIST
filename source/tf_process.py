@@ -1,6 +1,6 @@
 import matplotlib
 matplotlib.use('Agg')
-import os, inspect, time, scipy.misc
+import os, inspect, math, scipy.misc
 import tensorflow as tf
 import numpy as np
 import matplotlib.pyplot as plt
@@ -29,7 +29,7 @@ def make_canvas(images, size):
 
 def save_result(canvas_seq, height, width, batch_size, epoch, savedir="recon"):
 
-    canvas_seq = 1.0/(1.0+np.exp(-np.array(canvas_seq))) # sigmoid activation
+    canvas_seq = 1.0 / (1.0 + np.exp((-np.array(canvas_seq))+1e-12)) # sigmoid activation
 
     for cs_iter in range(canvas_seq.shape[0]):
         tmp_sequence = np.reshape(canvas_seq[cs_iter], [-1, height, width])
@@ -44,10 +44,13 @@ def training(sess, neuralnet, saver, dataset, epochs, batch_size, sequence_lengt
     make_dir(path="recon_te")
 
     train_writer = tf.summary.FileWriter(PACK_PATH+'/Checkpoint')
-    iterations = int(dataset.num_tr/batch_size**2)
-    start_time = time.time()
+    # iterations = int(dataset.num_tr/batch_size**2)
+    tr_batch = 5500
+    iterations = int(dataset.num_tr/tr_batch)
+    not_nan = True
     for epoch in range(epochs):
         if(epoch % print_step == 0):
+            neuralnet.batch_size = batch_size**2
             x_tr, _ = dataset.next_train(batch_size**2)
             x_te, _ = dataset.next_test(batch_size**2)
 
@@ -60,12 +63,22 @@ def training(sess, neuralnet, saver, dataset, epochs, batch_size, sequence_lengt
             save_result(canvas_seq=canvas_seq_te, height=dataset.height, width=dataset.width, batch_size=batch_size, epoch=epoch, savedir="recon_te")
 
         for iteration in range(iterations):
-            x_tr, _ = dataset.next_train(batch_size**2)
+            # x_tr, _ = dataset.next_train(batch_size**2)
+            neuralnet.batch_size = tr_batch
+            x_tr, _ = dataset.next_train(tr_batch)
 
             summaries = sess.run(neuralnet.summaries, feed_dict={neuralnet.inputs:x_tr})
             train_writer.add_summary(summaries, iteration+(epoch*iterations))
 
-            _ = sess.run(neuralnet.optimizer, feed_dict={neuralnet.inputs:x_tr})
+            loss_recon_tr, loss_kl_tr, _ = sess.run([neuralnet.loss_recon, neuralnet.loss_kl, neuralnet.optimizer], feed_dict={neuralnet.inputs:x_tr})
+            if(math.isnan(loss_recon_tr) or math.isnan(loss_kl_tr)):
+                not_nan = False
+                break
+
+        if(not_nan): saver.save(sess, PACK_PATH+"/Checkpoint/model_checker")
+        else:
+            print("Training is terminated by Nan Loss")
+            break
 
 def validation(sess, neuralnet, saver, dataset, batch_size):
 
@@ -82,7 +95,7 @@ def validation(sess, neuralnet, saver, dataset, batch_size):
         save_result(canvas_seq=canvas_seq_te, height=dataset.height, width=dataset.width, batch_size=batch_size, epoch=0, savedir="recon_te_final")
         loss_recon_tot.append(loss_recon_te)
         loss_kl_tot.append(loss_kl_te)
-        
+
     loss_recon_tot = np.asarray(loss_recon_tot)
     loss_kl_tot = np.asarray(loss_kl_tot)
     print("Recon:%.5f  KL:%.5f" %(loss_recon_tot.mean(), loss_kl_tot.mean()))

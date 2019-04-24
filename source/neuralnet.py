@@ -4,10 +4,10 @@ import tensorflow as tf
 
 class DRAW(object):
 
-    def __init__(self, height, width, batch_size=100, sequence_length=10, learning_rate=1e-3, attention=False):
+    def __init__(self, height, width, sequence_length=10, learning_rate=1e-3, attention=False):
 
         self.height, self.width = height, width
-        self.batch_size, self.sequence_length, self.learning_rate = batch_size, sequence_length, learning_rate
+        self.sequence_length, self.learning_rate = sequence_length, learning_rate
 
         self.attention_n = 5
         self.n_hidden = 256
@@ -153,16 +153,24 @@ class DRAW(object):
     def filterbank(self, gx, gy, sigma2, delta):
 
         grid_i = tf.reshape(tf.cast(tf.range(self.attention_n), tf.float32), [1, -1])
-        mu_x = gx + (grid_i - (self.attention_n / 2) - 0.5) * delta # eq 19
-        mu_y = gy + (grid_i - (self.attention_n / 2) - 0.5) * delta # eq 20
+
+        # Cordination is moved to (0, 0) by Equation 19 & 20.
+        # Equation 19.
+        mu_x = gx + (grid_i - (self.attention_n / 2) - 0.5) * delta
+        # Equation 20.
+        mu_y = gy + (grid_i - (self.attention_n / 2) - 0.5) * delta
+
         a = tf.reshape(tf.cast(tf.range(self.width), tf.float32), [1, 1, -1])
         b = tf.reshape(tf.cast(tf.range(self.height), tf.float32), [1, 1, -1])
+
         mu_x = tf.reshape(mu_x, [-1, self.attention_n, 1])
         mu_y = tf.reshape(mu_y, [-1, self.attention_n, 1])
+
         sigma2 = tf.reshape(sigma2, [-1, 1, 1])
+
         Fx = tf.exp(-tf.square(a - mu_x) / (2*sigma2))
         Fy = tf.exp(-tf.square(b - mu_y) / (2*sigma2)) # batch x N x B
-        # normalize, sum over A and B dims
+
         Fx=Fx/tf.maximum(tf.reduce_sum(Fx,2,keep_dims=True),1e-12)
         Fy=Fy/tf.maximum(tf.reduce_sum(Fy,2,keep_dims=True),1e-12)
 

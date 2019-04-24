@@ -108,7 +108,7 @@ def training(sess, neuralnet, saver, dataset, epochs, batch_size, canvas_size, s
     not_nan = True
     list_recon_tr, list_recon_te, list_kl_tr, list_kl_te = [], [], [], []
     for epoch in range(epochs+1):
-        if((epoch % print_step == 0) or (epoch == (epochs-1))):
+        if((epoch % print_step == 0) or (epoch == (epochs))):
             x_tr, _ = dataset.next_train(canvas_size**2)
             x_te, _ = dataset.next_test(canvas_size**2)
 

@@ -129,7 +129,7 @@ class DRAW(object):
     def attn_window(self, scope, h_dec):
 
         with tf.variable_scope(scope,reuse=self.share_parameters):
-            params_tmp = self.fully_connected(h_dec, self.n_hidden, self.attention_n)
+            params_tmp = self.fully_connected(h_dec, self.n_hidden, 5) # make parameters by fully connencted layer.
 
         gx_, gy_, log_sigma_sq, log_delta_, log_gamma = tf.split(params_tmp, 5, 1)
         gx = ((self.width + 1) / 2) * (gx_ + 1)

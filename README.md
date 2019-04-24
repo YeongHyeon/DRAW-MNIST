@@ -1,5 +1,7 @@
 # DRAW: Deep Recurrent Attentive Writer
 
+Implementation of DRAW using Tensorflow.
+
 ## Requirements
 * Python 3.5.2  
 * Tensorflow 1.4.0  

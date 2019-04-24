@@ -38,6 +38,9 @@ def save_result(c_seq, height, width, canvas_size, step, savedir="recon"):
 
 def save_recon_loss(recon_tr, recon_te):
 
+    recon_tr = np.asarray(recon_tr)
+    recon_te = np.asarray(recon_te)
+
     plt.clf()
     plt.rcParams['font.size'] = 15
     plt.plot(recon_tr, label="Training")
@@ -49,10 +52,24 @@ def save_recon_loss(recon_tr, recon_te):
     plt.savefig("recon.png")
     plt.close()
 
-    np.save("recon_tr", np.asarray(recon_tr))
-    np.save("recon_te", np.asarray(recon_te))
+    plt.clf()
+    plt.rcParams['font.size'] = 15
+    plt.plot(np.log(recon_tr), label="Training")
+    plt.plot(np.log(recon_te), label="Test")
+    plt.ylabel("Cross Encropy Loss (Log scale)")
+    plt.xlabel("Epoch")
+    plt.legend(loc="upper right")
+    plt.tight_layout()
+    plt.savefig("recon_log.png")
+    plt.close()
+
+    np.save("recon_tr", recon_tr)
+    np.save("recon_te", recon_te)
 
 def save_kl_loss(kl_tr, kl_te):
+
+    kl_tr = np.asarray(kl_tr)
+    kl_te = np.asarray(kl_te)
 
     plt.clf()
     plt.rcParams['font.size'] = 15
@@ -65,8 +82,19 @@ def save_kl_loss(kl_tr, kl_te):
     plt.savefig("kl.png")
     plt.close()
 
-    np.save("kl_tr", np.asarray(kl_tr))
-    np.save("kl_te", np.asarray(kl_te))
+    plt.clf()
+    plt.rcParams['font.size'] = 15
+    plt.plot(np.log(kl_tr), label="Training")
+    plt.plot(np.log(kl_te), label="Test")
+    plt.ylabel("KL Divergence (Log scale)")
+    plt.xlabel("Epoch")
+    plt.legend(loc="upper right")
+    plt.tight_layout()
+    plt.savefig("kl_log.png")
+    plt.close()
+
+    np.save("kl_tr", kl_tr)
+    np.save("kl_te", kl_te)
 
 def training(sess, neuralnet, saver, dataset, epochs, batch_size, canvas_size, sequence_length, print_step=1):
 
@@ -79,7 +107,7 @@ def training(sess, neuralnet, saver, dataset, epochs, batch_size, canvas_size, s
     iterations = int(dataset.num_tr/batch_size)
     not_nan = True
     list_recon_tr, list_recon_te, list_kl_tr, list_kl_te = [], [], [], []
-    for epoch in range(epochs):
+    for epoch in range(epochs+1):
         if((epoch % print_step == 0) or (epoch == (epochs-1))):
             x_tr, _ = dataset.next_train(canvas_size**2)
             x_te, _ = dataset.next_test(canvas_size**2)

@@ -21,12 +21,12 @@ def main():
 if __name__ == '__main__':
 
     parser = argparse.ArgumentParser()
-    parser.add_argument('--epoch', type=int, default=1000, help='-')
-    parser.add_argument('--batch', type=int, default=11000, help='-')
-    parser.add_argument('--canvas', type=int, default=10, help='-')
-    parser.add_argument('--seqlen', type=int, default=10, help='-')
-    parser.add_argument('--lr', type=float, default=0.001, help='-')
-    parser.add_argument('--attention', type=bool, default=False, help='-')
+    parser.add_argument('--epoch', type=int, default=1000, help='Epoch for training')
+    parser.add_argument('--batch', type=int, default=11000, help='Batch size for training.')
+    parser.add_argument('--canvas', type=int, default=10, help='Canvas size for generating result.')
+    parser.add_argument('--seqlen', type=int, default=10, help='Sequence length of RNN.')
+    parser.add_argument('--lr', type=float, default=0.001, help='Learning rate for optimization.')
+    parser.add_argument('--attention', type=bool, default=False, help='Use attention or not.')
 
     FLAGS, unparsed = parser.parse_known_args()
 

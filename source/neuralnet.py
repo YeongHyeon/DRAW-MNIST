@@ -37,7 +37,7 @@ class DRAW(object):
 
             # Equation 4.
             # r_t = read(x_t, x_t_hat)
-            if(attention): r_t = self.attention_read(self.x, x_t_hat, h_prev_dec) # patch
+            if(attention): r_t = self.attention_read(self.x, x_t_hat, h_prev_dec)
             else: r_t = self.basic_read(self.x, x_t_hat)
 
             # Equation 5.
@@ -53,7 +53,7 @@ class DRAW(object):
             h_t_dec, h_dec_state = self.decode(h_dec_state, z_t)
 
             # Equation 8.
-            if(attention): self.c[t] = c_prev + self.attention_write(h_t_dec) # patch
+            if(attention): self.c[t] = c_prev + self.attention_write(h_t_dec)
             else: self.c[t] = c_prev + self.basic_write(h_t_dec)
 
             # Replace h_prev_dec as h_t_dec
@@ -129,15 +129,15 @@ class DRAW(object):
     def attn_window(self, scope, h_dec):
 
         with tf.variable_scope(scope,reuse=self.share_parameters):
-            params=self.fully_connected(h_dec, self.n_hidden, self.attention_n)
+            params_tmp = self.fully_connected(h_dec, self.n_hidden, self.attention_n)
 
-        gx_,gy_,log_sigma2,log_delta,log_gamma=tf.split(params,5,1)
-        gx=(self.width+1)/2*(gx_+1)
-        gy=(self.height+1)/2*(gy_+1)
-        sigma2=tf.exp(log_sigma2)
-        delta=(max(self.width, self.height)-1)/(self.attention_n-1)*tf.exp(log_delta) # batch x N
+        gx_, gy_, log_sigma_sq, log_delta_, log_gamma = tf.split(params_tmp, 5, 1)
+        gx = ((self.width + 1) / 2) * (gx_ + 1)
+        gy = ((self.height + 1) / 2) * (gy_ + 1)
+        sigma_sq = tf.exp(log_sigma_sq)
+        delta = ((max(self.width, self.height) - 1) / (self.attention_n-1)) * tf.exp(log_delta_)
 
-        Fx,Fy = self.filterbank(gx,gy,sigma2,delta)
+        Fx,Fy = self.filterbank(gx, gy, sigma_sq, delta)
         return Fx, Fy, tf.exp(log_gamma)
 
     def filter_img(self, inputs, Fx, Fy, gamma): # apply parameters for patch of gaussian filters
@@ -150,29 +150,31 @@ class DRAW(object):
 
         return glimpse * tf.reshape(gamma, [-1, 1]) # rescale
 
-    def filterbank(self, gx, gy, sigma2, delta):
+    def filterbank(self, gx, gy, sigma_sq, delta):
 
         grid_i = tf.reshape(tf.cast(tf.range(self.attention_n), tf.float32), [1, -1])
 
         # Cordination is moved to (0, 0) by Equation 19 & 20.
         # Equation 19.
         mu_x = gx + (grid_i - (self.attention_n / 2) - 0.5) * delta
+        mu_x = tf.reshape(mu_x, [-1, self.attention_n, 1])
         # Equation 20.
         mu_y = gy + (grid_i - (self.attention_n / 2) - 0.5) * delta
+        mu_y = tf.reshape(mu_y, [-1, self.attention_n, 1])
 
+        # (i, j) of F is a point in the attention patch.
+        # (a, b) is a point in the input image.
         a = tf.reshape(tf.cast(tf.range(self.width), tf.float32), [1, 1, -1])
         b = tf.reshape(tf.cast(tf.range(self.height), tf.float32), [1, 1, -1])
 
-        mu_x = tf.reshape(mu_x, [-1, self.attention_n, 1])
-        mu_y = tf.reshape(mu_y, [-1, self.attention_n, 1])
+        sigma_sq = tf.reshape(sigma_sq, [-1, 1, 1])
 
-        sigma2 = tf.reshape(sigma2, [-1, 1, 1])
-
-        Fx = tf.exp(-tf.square(a - mu_x) / (2*sigma2))
-        Fy = tf.exp(-tf.square(b - mu_y) / (2*sigma2)) # batch x N x B
-
-        Fx=Fx/tf.maximum(tf.reduce_sum(Fx,2,keep_dims=True),1e-12)
-        Fy=Fy/tf.maximum(tf.reduce_sum(Fy,2,keep_dims=True),1e-12)
+        # Equation 25.
+        Fx = tf.exp(-(tf.square(a - mu_x) / (2*sigma_sq)))
+        Fx = Fx/tf.maximum(tf.reduce_sum(Fx,2,keep_dims=True),1e-12)
+        # Equation 26.
+        Fy = tf.exp(-(tf.square(b - mu_y) / (2*sigma_sq)))
+        Fy = Fy/tf.maximum(tf.reduce_sum(Fy,2,keep_dims=True),1e-12)
 
         return Fx, Fy
 

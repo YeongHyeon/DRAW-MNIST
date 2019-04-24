@@ -14,59 +14,76 @@ class DRAW(object):
         self.n_z = 10
         self.share_parameters = False
 
-        self.canvas_seq = [0] * self.sequence_length # sequence of canvases
+        self.c = [0] * self.sequence_length # sequence of canvases
         self.mu, self.sigma = [0] * self.sequence_length, [0] * self.sequence_length
 
-        self.inputs = tf.placeholder(tf.float32, [None, self.height*self.width]) # input (batch_size * img_size)
-        self.z_noise = tf.random_normal((tf.shape(self.inputs)[0], self.n_z), mean=0, stddev=1) # Qsampler noise
+        self.x = tf.placeholder(tf.float32, [None, self.height*self.width]) # input (batch_size * img_size)
+        self.z_noise = tf.random_normal((tf.shape(self.x)[0], self.n_z), mean=0, stddev=1) # Qsampler noise
 
         self.lstm_enc = tf.nn.rnn_cell.LSTMCell(num_units=self.n_hidden, state_is_tuple=True) # encoder Op
         self.lstm_dec = tf.nn.rnn_cell.LSTMCell(num_units=self.n_hidden, state_is_tuple=True) # decoder Op
 
-        h_dec_prev = tf.zeros((tf.shape(self.inputs)[0], self.n_hidden))
-        enc_state = self.lstm_enc.zero_state(tf.shape(self.inputs)[0], tf.float32)
-        dec_state = self.lstm_dec.zero_state(tf.shape(self.inputs)[0], tf.float32)
+        h_prev_dec = tf.zeros((tf.shape(self.x)[0], self.n_hidden))
+        h_prev_enc = self.lstm_enc.zero_state(tf.shape(self.x)[0], tf.float32)
+        h_dec_state = self.lstm_dec.zero_state(tf.shape(self.x)[0], tf.float32)
 
-        x = self.inputs
         for t in range(self.sequence_length):
-            # error image + original image
-            if(t==0): c_prev = tf.zeros((tf.shape(self.inputs)[0], self.height*self.width))
-            else: self.canvas_seq[t-1]
-            x_hat = x - tf.sigmoid(c_prev)
 
-            if(attention): conseq = self.attention_read(x, x_hat, h_dec_prev) # read the image with attention (patch)
-            else: conseq = self.basic_read(x, x_hat) # read the image
+            # Equation 3.
+            # x_t_hat = x = sigmoid(c_(t-1))
+            if(t==0): c_prev = tf.zeros((tf.shape(self.x)[0], self.height*self.width))
+            else: c_prev = self.c[t-1]
+            x_t_hat = self.x - tf.nn.sigmoid(c_prev)
 
-            self.mu[t], self.sigma[t], enc_state = self.encode(enc_state, tf.concat([conseq, h_dec_prev], 1))
-            z = self.sample_latent(self.mu[t], self.sigma[t])
-            h_dec, dec_state = self.decode(dec_state, z)
+            # Equation 4.
+            # r_t = read(x_t, x_t_hat)
+            if(attention): r_t = self.attention_read(self.x, x_t_hat, h_prev_dec) # patch
+            else: r_t = self.basic_read(self.x, x_t_hat)
 
-            print("Sequence %d" %(t))
-            print("Input > Concat > Latent > Output")
-            print(x.shape, conseq.shape, z.shape, h_dec.shape)
+            # Equation 5.
+            # h_t_enc = RNN_encoder(h_prev_enc, [r_t, h_prev_dec])
+            self.mu[t], self.sigma[t], h_t_enc, h_prev_enc = self.encode(h_prev_enc, tf.concat([r_t, h_prev_dec], 1))
 
-            if(attention): self.canvas_seq[t] = c_prev + self.attention_write(h_dec) # patch
-            else: self.canvas_seq[t] = c_prev + self.basic_write(h_dec)
-            h_dec_prev = h_dec
-            self.share_parameters = True # from now on, share variables
+            # Equation 6.
+            # z_t
+            z_t = self.sample_latent(self.mu[t], self.sigma[t])
 
-        # calculate loss from final sequence
-        self.final_sequence = tf.nn.sigmoid(self.canvas_seq[-1])
-        # Reconstructor. E[log P(X|z)]
-        self.loss_recon = tf.reduce_sum(self.inputs * tf.log(self.final_sequence + 1e-12) + (1 - self.inputs) * tf.log(1 - self.final_sequence + 1e-12), axis=1)
+            # Equation 7.
+            # h_t_dec = RNN_decoder(h_prev_dec, z_t)
+            h_t_dec, h_dec_state = self.decode(h_dec_state, z_t)
 
-        # Regularizer. D_KL(Q(z|X) || P(z)); calculate in closed form as both dist. are Gaussian
+            # Equation 8.
+            if(attention): self.c[t] = c_prev + self.attention_write(h_t_dec) # patch
+            else: self.c[t] = c_prev + self.basic_write(h_t_dec)
+
+            # Replace h_prev_dec as h_t_dec
+            h_prev_dec = h_t_dec
+
+            self.share_parameters = True
+
+            if(t==0):
+                print("Sequence %d" %(t))
+                print("Input", self.x.shape)
+                print("Read", r_t.shape)
+                print("Encode", h_t_enc.shape)
+                print("Latent Space", z_t.shape)
+                print("Decode", h_t_dec.shape)
+                print("Write", self.c[t].shape)
+
+        # Equation 9.
+        # Reconstruction error: Negative log probability.
+        # L^x = -log D(x|c_T)
+        # https://www.tensorflow.org/api_docs/python/tf/nn/sigmoid_cross_entropy_with_logits
+        self.loss_recon = tf.reduce_mean(tf.reduce_sum(tf.nn.sigmoid_cross_entropy_with_logits(labels=self.x, logits=self.c[-1]), 1))
+
+        # Equation 10 & 11.
+        # Regularizer: Kullback-Leibler divergence of latent prior.
+        # L^z = (1/2) * {Sum_(t=1)^(T) mu^2 + sigma^2 - log(sigma^2)} - (T/2)
         kl_list = [0]*self.sequence_length
-        for t in range(self.sequence_length):
-            tmp_mu = tf.square(self.mu[t])
-            tmp_sigma = tf.square(self.sigma[t])
-            kl_list[t] = 0.5 * tf.reduce_sum(tf.square(tmp_mu) + tf.square(tmp_sigma) - tf.log(tf.square(tmp_sigma) + 1e-12) - 1, axis=1) - (self.sequence_length * 0.5)
+        for t in range(self.sequence_length): kl_list[t] = 0.5 * tf.reduce_sum(tf.square(self.mu[t]) + tf.square(self.sigma[t]) - tf.log(tf.square(self.sigma[t]) + 1e-12), 1) - 0.5
         self.loss_kl = tf.reduce_mean(tf.add_n(kl_list)) # element wise sum using tf.add_n
 
-        self.loss_recon = -tf.reduce_mean(self.loss_recon)
-        self.loss_kl = tf.reduce_mean(self.loss_kl)
-        self.ELBO = -self.loss_recon - self.loss_kl
-        self.loss_total = -self.ELBO
+        self.loss_total = self.loss_recon + self.loss_kl
 
         self.optimizer = tf.train.AdamOptimizer(learning_rate=self.learning_rate).minimize(self.loss_total)
 
@@ -74,6 +91,8 @@ class DRAW(object):
         tf.summary.scalar('loss_kl', self.loss_kl)
         tf.summary.scalar('loss_total', self.loss_total)
         self.summaries = tf.summary.merge_all()
+
+    def binary_crossentropy(self, t,o): return -(t*tf.log(o+1e-12) + (1.0-t)*tf.log(1.0-o+1e-12))
 
     def sample_latent(self, mu, sigma): return mu + sigma * self.z_noise
 
@@ -86,9 +105,9 @@ class DRAW(object):
 
         return decoded_image_portion
 
-    def attention_read(self, inputs, x_hat, h_dec_prev):
+    def attention_read(self, inputs, x_hat, h_prev_dec):
 
-        Fx, Fy, gamma = self.attn_window("read", h_dec_prev)
+        Fx, Fy, gamma = self.attn_window("read", h_prev_dec)
 
         x = self.filter_img(inputs, Fx, Fy, gamma)
         x_hat = self.filter_img(x_hat, Fx, Fy, gamma)
@@ -156,26 +175,30 @@ class DRAW(object):
 
         return tf.random_normal(shape=size, stddev=xavier_stddev)
 
-    def fully_connected(self, inputs, in_dim, out_dim, scope=None, with_w=False):
+    def fully_connected(self, inputs, in_dim, out_dim, scope=None):
 
         with tf.variable_scope(scope or "Linear"):
             W = tf.Variable(self.xavier_init([in_dim, out_dim]))
             b = tf.Variable(tf.zeros(shape=[out_dim]))
 
-            if with_w: return tf.matmul(inputs, W) + b, W, b
-            else: return tf.matmul(inputs, W) + b
+            return tf.matmul(inputs, W) + b
 
     def encode(self, prev_state, inputs):
 
         with tf.variable_scope("encoder", reuse=self.share_parameters):
             hidden_state, next_state = self.lstm_enc(inputs, prev_state)
-#
+
+        # Equation 1.
+        # mu_t = h_t_enc * W + b
         with tf.variable_scope("mu", reuse=self.share_parameters):
             mu = self.fully_connected(hidden_state, self.n_hidden, self.n_z)
-        with tf.variable_scope("sigma", reuse=self.share_parameters):
-            sigma = self.fully_connected(hidden_state, self.n_hidden, self.n_z)
 
-        return mu, sigma, next_state
+        # Equation 2.
+        # sigma_t = exp(h_t_enc * W + b)
+        with tf.variable_scope("sigma", reuse=self.share_parameters):
+            sigma = tf.exp(self.fully_connected(hidden_state, self.n_hidden, self.n_z))
+
+        return mu, sigma, hidden_state, next_state
 
     def decode(self, prev_state, latents):
 

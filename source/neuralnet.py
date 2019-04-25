@@ -178,17 +178,12 @@ class DRAW(object):
 
         return Fx, Fy
 
-    def xavier_init(self, size):
-
-        in_dim = size[0]
-        xavier_stddev = 1. / tf.sqrt(in_dim / 2.)
-
-        return tf.random_normal(shape=size, stddev=xavier_stddev)
+    def xavier_std(self, in_dim): return 1. / tf.sqrt(in_dim / 2.)
 
     def fully_connected(self, inputs, in_dim, out_dim, scope=None):
 
         with tf.variable_scope(scope or "Linear"):
-            W = tf.Variable(self.xavier_init([in_dim, out_dim]))
+            W = tf.Variable(tf.random_normal(shape=[in_dim, out_dim], stddev=self.xavier_std(in_dim)))
             b = tf.Variable(tf.zeros(shape=[out_dim]))
 
             return tf.matmul(inputs, W) + b

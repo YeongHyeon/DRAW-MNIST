@@ -17,7 +17,7 @@ class DRAW(object):
         self.c = [0] * self.sequence_length # sequence of canvases
         self.mu, self.sigma = [0] * self.sequence_length, [0] * self.sequence_length
 
-        self.x = tf.placeholder(tf.float32, [None, self.height*self.width]) # input (batch_size * img_size)
+        self.x = tf.placeholder(tf.float32, [None, self.height * self.width]) # input (batch_size * img_size)
         self.z_noise = tf.random_normal((tf.shape(self.x)[0], self.n_z), mean=0, stddev=1) # Qsampler noise
 
         self.lstm_enc = tf.nn.rnn_cell.LSTMCell(num_units=self.n_hidden, state_is_tuple=True) # encoder Op
@@ -31,7 +31,7 @@ class DRAW(object):
 
             # Equation 3.
             # x_t_hat = x = sigmoid(c_(t-1))
-            if(t==0): c_prev = tf.zeros((tf.shape(self.x)[0], self.height*self.width))
+            if(t==0): c_prev = tf.zeros((tf.shape(self.x)[0], self.height * self.width))
             else: c_prev = self.c[t-1]
             x_t_hat = self.x - tf.nn.sigmoid(c_prev)
 
@@ -61,14 +61,12 @@ class DRAW(object):
 
             self.share_parameters = True
 
-            if(t==0):
-                print("Sequence %d" %(t))
-                print("Input", self.x.shape)
-                print("Read", r_t.shape)
-                print("Encode", h_t_enc.shape)
-                print("Latent Space", z_t.shape)
-                print("Decode", h_t_dec.shape)
-                print("Write", self.c[t].shape)
+        print("Input", self.x.shape)
+        print("Read", r_t.shape)
+        print("Encode", h_t_enc.shape)
+        print("Latent Space", z_t.shape)
+        print("Decode", h_t_dec.shape)
+        print("Write", self.c[-1].shape)
 
         # Equation 9.
         # Reconstruction error: Negative log probability.
@@ -92,8 +90,6 @@ class DRAW(object):
         tf.summary.scalar('loss_total', self.loss_total)
         self.summaries = tf.summary.merge_all()
 
-    def binary_crossentropy(self, t,o): return -(t*tf.log(o+1e-12) + (1.0-t)*tf.log(1.0-o+1e-12))
-
     def sample_latent(self, mu, sigma): return mu + sigma * self.z_noise
 
     def basic_read(self, inputs, x_hat): return tf.concat([inputs, x_hat], 1)
@@ -101,7 +97,7 @@ class DRAW(object):
     def basic_write(self, hidden_state):
 
         with tf.variable_scope("write", reuse=self.share_parameters):
-            decoded_image_portion = self.fully_connected(hidden_state, self.n_hidden, self.height*self.width)
+            decoded_image_portion = self.fully_connected(hidden_state, self.n_hidden, self.height * self.width)
 
         return decoded_image_portion
 
@@ -120,9 +116,9 @@ class DRAW(object):
             w = self.fully_connected(hidden_state, self.n_hidden, self.attention_n**2)
         w = tf.reshape(w, [-1, self.attention_n, self.attention_n])
         Fx, Fy, gamma = self.attn_window("write", hidden_state)
-        Fyt = tf.transpose(Fy, perm=[0,2,1])
+        Fyt = tf.transpose(Fy, perm=[0, 2, 1])
         wr = tf.matmul(Fyt, tf.matmul(w, Fx))
-        wr = tf.reshape(wr, [-1, self.height*self.width])
+        wr = tf.reshape(wr, [-1, self.height * self.width])
 
         return wr * tf.reshape(1.0/gamma, [-1, 1])
 
@@ -142,7 +138,7 @@ class DRAW(object):
 
     def filter_img(self, inputs, Fx, Fy, gamma): # apply parameters for patch of gaussian filters
 
-        Fxt = tf.transpose(Fx, perm=[0,2,1])
+        Fxt = tf.transpose(Fx, perm=[0, 2, 1])
         img = tf.reshape(inputs, [-1, self.height, self.width])
 
         glimpse = tf.matmul(Fy, tf.matmul(img, Fxt)) # gaussian patches
